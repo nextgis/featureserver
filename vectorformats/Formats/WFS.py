@@ -1,7 +1,13 @@
 from vectorformats.Formats.Format import Format
+from vectorformats.Formats.WKT import to_wkt
 import re, xml.dom.minidom as m
 from lxml import etree
 from xml.sax.saxutils import escape
+
+try:
+    import osgeo.ogr as ogr
+except ImportError:
+    import ogr
 
 class WFS(Format):
     """WFS-like GML writer."""
@@ -63,55 +69,14 @@ class WFS(Format):
         
         if "EPSG" not in str(srs):
             srs = "EPSG:" + str(srs)
-        
-        if geometry['type'] == "Point":
-            coords = ",".join(map(str, geometry['coordinates']))
-            return "<gml:Point srsName=\"%s\"><gml:coordinates decimal=\".\" cs=\",\" ts=\" \">%s</gml:coordinates></gml:Point>" % (str(srs), coords)
-            #coords = " ".join(map(str, geometry['coordinates']))
-            #return "<gml:Point srsDimension=\"2\" srsName=\"%s\"><gml:pos>%s</gml:pos></gml:Point>" % (str(srs), coords)
-        elif geometry['type'] == "LineString":
-            coords = " ".join(",".join(map(str, coord)) for coord in geometry['coordinates'])
-            return "<gml:LineString><gml:coordinates decimal=\".\" cs=\",\" ts=\" \" srsName=\"%s\">%s</gml:coordinates></gml:LineString>" % (str(srs), coords)
-            #return "<gml:curveProperty><gml:LineString srsDimension=\"2\" srsName=\"%s\"><gml:coordinates>%s</gml:coordinates></gml:LineString></gml:curveProperty>" % (str(srs), coords)
-        elif geometry['type'] == "Polygon":
-            coords = " ".join(map(lambda x: ",".join(map(str, x)), geometry['coordinates'][0]))
-            #out = """
-            #    <gml:exterior>
-            #        <gml:LinearRing>
-            #            <gml:coordinates decimal=\".\" cs=\",\" ts=\" \">%s</gml:coordinates>
-            #        </gml:LinearRing>
-            #    </gml:exterior>
-            #""" % coords 
-            out = """
-                <gml:exterior>
-                    <gml:LinearRing srsDimension="2">
-                        <gml:coordinates>%s</gml:coordinates>
-                    </gml:LinearRing>
-                </gml:exterior>
-            """ % coords 
-            
-            inner_rings = []
-            for inner_ring in geometry['coordinates'][1:]:
-                coords = " ".join(map(lambda x: ",".join(map(str, x)), inner_ring))
-                #inner_rings.append("""
-                #    <gml:interior>
-                #        <gml:LinearRing>
-                #            <gml:coordinates decimal=\".\" cs=\",\" ts=\" \">%s</gml:coordinates>
-                #        </gml:LinearRing>
-                #    </gml:interior>
-                #""" % coords) 
-                inner_rings.append("""
-                    <gml:interior>
-                        <gml:LinearRing srsDimension="2">
-                            <gml:coordinates>%s</gml:coordinates>
-                        </gml:LinearRing>
-                    </gml:interior>
-                """ % coords) 
-            
-            return """
-                            <gml:Polygon srsName="%s">
-                                %s %s
-                            </gml:Polygon>""" % (srs, out, "".join(inner_rings))
+
+        if geometry['type'].lower() in \
+                ['point', 'linestring', 'polygon', 'multipolygon', 'multilinestring', 'multipoint']:
+            wkt = to_wkt(geometry)
+            geom_wkt = ogr.CreateGeometryFromWkt(wkt)
+
+            gml = geom_wkt.ExportToGML()
+            return gml
         else:
             raise Exception("Could not convert geometry of type %s." % geometry['type'])
     
